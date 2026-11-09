@@ -47,7 +47,7 @@
   </main>
 
 <script>
-  // SILAKAN SESUAIKAN DENGAN URL WEB APP GOOGLE APPS SCRIPT ANDA
+  // GANTI DENGAN URL WEB APP GOOGLE APPS SCRIPT ASLI ANDA (AKHIRAN /exec)
   const GAS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycb.../exec"; 
 
   const params = new URLSearchParams(location.search);
@@ -156,18 +156,15 @@
     if (!nisn) return;
 
     busy = true;
-    // Jeda sebentar scanner agar tidak membaca QR yang sama berulang kali
     try { if (scanner && started) await scanner.pause(true); } catch (e) {}
     
     setStatusHtml('⏳ Memproses NISN: <span class="nisn">' + nisn + '</span>...');
 
-    // 1. Jika terhubung via window.opener (Tab terpisah)
     const payload = { type: 'PRESENSI_QR_RESULT', status: 'success', channel: channel, nisn: nisn, mode: mode };
     if (window.opener && !window.opener.closed) {
       window.opener.postMessage(payload, '*');
     }
 
-    // 2. Langsung kirim ke Google Apps Script (Backend) untuk memastikan data tersimpan
     fetch(GAS_WEBAPP_URL, {
       method: 'POST',
       mode: 'cors',
@@ -197,12 +194,11 @@
       playSound('error');
       setStatusHtml(`
         <div class="badge-error">⚠️ KESALAHAN KONEKSI</div>
-        <div>Gagal terhubung ke Google Sheets server.</div>
+        <div>Gagal terhubung ke Google Sheets server. Periksa URL Web App Apps Script Anda.</div>
         <div class="nisn">${nisn}</div>
       `, true);
     })
     .finally(() => {
-      // Tunggu 2 detik agar petugas piket sempat melihat nama siswa, lalu resume kamera otomatis
       setTimeout(async () => {
         setStatusHtml('<b>Kamera Standby</b><br>Silakan scan siswa berikutnya...');
         busy = false;
