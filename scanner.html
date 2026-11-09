@@ -267,9 +267,6 @@
    KONFIGURASI
 ===================================================== */
 
-const GAS_WEBAPP_URL =
-  "https://script.google.com/macros/s/AKfycbzxI28t37AtmAyhkICO3ZF_iBM4tFCKEn7kANBV7ZQhFRY5NvW4qVKhng_TdjTHLQSXhg/exec";
-
 const params = new URLSearchParams(location.search);
 
 const mode = params.get("mode") === "out" ? "out" : "in";
@@ -636,21 +633,30 @@ function showError(data, nisn) {
 ===================================================== */
 
 function sendResultToDashboard(payload) {
-
   try {
-
     if (window.opener && !window.opener.closed) {
       window.opener.postMessage(payload, "*");
+      return true;
     }
 
+    console.error("Halaman dashboard tidak ditemukan.");
+    return false;
+
   } catch (err) {
-    console.warn("Gagal mengirim hasil ke dashboard:", err);
+    console.error("Gagal mengirim hasil ke dashboard:", err);
+    return false;
   }
 }
 
 
 /* =====================================================
    PROSES QR CODE
+===================================================== */
+
+
+/* =====================================================
+   PROSES QR CODE
+   SCANNER HANYA MENGIRIM NISN KE DASHBOARD
 ===================================================== */
 
 async function onQrDecoded(decodedText) {
@@ -661,7 +667,7 @@ async function onQrDecoded(decodedText) {
 
   if (!nisn) return;
 
-  // Cegah pembacaan QR berulang.
+  // Cegah QR terbaca berulang kali.
   busy = true;
 
   try {
@@ -671,110 +677,86 @@ async function onQrDecoded(decodedText) {
   }
 
   setStatusHtml(`
-    ⏳ MENYIMPAN PRESENSI
+    ⏳ QR CODE TERDETEKSI
     <div class="nisn">${escapeHtml(nisn)}</div>
-    Mohon tunggu...
+    Mengirim data ke dashboard...
   `);
-
-  let payload;
 
   try {
 
-    const response = await fetch(GAS_WEBAPP_URL, {
-      method: "POST",
-      mode: "cors",
+    // Kirim NISN saja.
+    // Tidak ada fetch() ke Apps Script di sini.
+    const payload = {
+      type: "PRESENSI_QR_RESULT",
+      status: "scan",
+      channel: channel,
+      nisn: nisn,
+      mode: mode
+    };
 
-      headers: {
-        "Content-Type": "text/plain;charset=utf-8"
-      },
+    const sent = sendResultToDashboard(payload);
 
-      body: JSON.stringify({
-        action: "scan",
-        nisn: nisn,
-        mode: mode
-      })
-    });
-
-    if (!response.ok) {
-      throw new Error(
-        "HTTP " + response.status
-      );
-    }
-
-    const data = await response.json();
-
-    if (data.status === "success") {
+    if (sent) {
 
       playSound("success");
 
-      showSuccess(data, nisn);
+      setStatusHtml(`
+        <div class="badge-success">
+          ✔ QR BERHASIL DIBACA
+        </div>
 
-      payload = {
-        type: "PRESENSI_QR_RESULT",
-        status: "success",
-        channel: channel,
-        nisn: nisn,
-        mode: mode,
-        data: data
-      };
+        <div class="nisn">
+          ${escapeHtml(nisn)}
+        </div>
+
+        <div style="font-size:12px;color:#94a3b8;margin-top:8px;">
+          Data dikirim ke dashboard.<br>
+          Menunggu proses penyimpanan presensi...
+        </div>
+      `);
 
     } else {
 
       playSound("error");
 
-      showError(data, nisn);
+      setStatusHtml(`
+        <div class="badge-error">
+          ✖ DASHBOARD TIDAK TERHUBUNG
+        </div>
 
-      payload = {
-        type: "PRESENSI_QR_RESULT",
-        status: "error",
-        channel: channel,
-        nisn: nisn,
-        mode: mode,
-        data: data
-      };
+        <div class="nisn">
+          ${escapeHtml(nisn)}
+        </div>
+
+        <div style="font-size:12px;color:#fecdd3;margin-top:8px;">
+          Buka scanner melalui tombol pada dashboard.
+        </div>
+      `, true);
     }
 
   } catch (err) {
 
-    console.error("Presensi error:", err);
+    console.error("Kesalahan pengiriman QR:", err);
 
     playSound("error");
 
     setStatusHtml(`
       <div class="badge-error">
-        ⚠ KESALAHAN KONEKSI
-      </div>
-
-      <div>
-        ${escapeHtml(err.message || err)}
+        ✖ GAGAL MENGIRIM QR
       </div>
 
       <div class="nisn">
         ${escapeHtml(nisn)}
       </div>
 
-      <div style="font-size:12px;color:#94a3b8;margin-top:8px;">
-        Periksa koneksi internet dan URL Apps Script.
+      <div style="font-size:12px;color:#fecdd3;margin-top:8px;">
+        ${escapeHtml(err.message || err)}
       </div>
     `, true);
 
-    payload = {
-      type: "PRESENSI_QR_RESULT",
-      status: "error",
-      channel: channel,
-      nisn: nisn,
-      mode: mode,
-      message: err.message || String(err)
-    };
-
   } finally {
 
-    // Kirim hasil setelah proses penyimpanan selesai.
-    if (payload) {
-      sendResultToDashboard(payload);
-    }
-
-    // Tunggu agar laporan bisa dibaca operator.
+    // Beri waktu operator melihat hasil pembacaan.
     setTimeout(async function() {
 
       if (!started || !scanner || stopping) {
@@ -797,7 +779,7 @@ async function onQrDecoded(decodedText) {
             SCANNER TIDAK DAPAT DILANJUTKAN
           </div>
           <br>
-          Silakan tekan Aktifkan Kamera kembali.
+          Silakan matikan lalu aktifkan kamera kembali.
         `, true);
 
       } finally {
@@ -807,6 +789,7 @@ async function onQrDecoded(decodedText) {
     }, 2000);
   }
 }
+
 
 
 /* =====================================================
