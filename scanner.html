@@ -28,8 +28,21 @@
       <button class="secondary" id="switchBtn" onclick="switchCamera()" disabled>Ganti Kamera</button>
       <button class="danger" id="stopBtn" onclick="stopCamera()" disabled>Matikan Kamera</button>
     </div>
+
+    <!-- AREA INPUT MANUAL NISN & NAVIGASI KEMBALI -->
+    <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #334155; display: flex; flex-direction: column; gap: 10px;">
+      <div style="display: flex; gap: 8px;">
+        <input type="text" id="manualNisnInput" placeholder="Ketik NISN manual..." style="flex: 1; background: #0f172a; border: 1px solid #475569; border-radius: 10px; padding: 10px 12px; color: white; font-size: 13px; font-family: monospace;" onkeypress="if(event.key==='Enter') submitManualNisn()">
+        <button class="primary" onclick="submitManualNisn()" style="padding: 10px 16px; white-space: nowrap;">Kirim NISN</button>
+      </div>
+      <button onclick="goToDashboard()" style="background: #475569; color: #f8fafc; width: 100%; padding: 10px; border-radius: 10px; font-weight: bold; cursor: pointer; border: none; text-align: center;">
+        ← Kembali ke Dashboard
+      </button>
+    </div>
+
     <p class="hint">Jika kamera gagal: pastikan halaman dibuka melalui HTTPS, izin kamera Chrome diizinkan, dan tidak ada aplikasi lain yang sedang memakai kamera.</p>
   </section></main>
+
 <script>
   const params = new URLSearchParams(location.search);
   const mode = params.get('mode') === 'out' ? 'out' : 'in';
@@ -121,7 +134,7 @@
     if (busy) return;
     let nisn = String(decodedText == null ? '' : decodedText).trim();
     if (!/^\d{1,10}$/.test(nisn)) {
-      setStatus('QR terbaca tetapi isinya bukan NISN 10 digit. Periksa QR pada kartu siswa.', true);
+      setStatus('Isi input bukan NISN valid (maks 10 digit). Periksa NISN.', true);
       return;
     }
     nisn = nisn.padStart(10, '0');
@@ -130,7 +143,7 @@
       return;
     }
     busy = true;
-    setStatus('QR terbaca. Mengirim NISN ' + nisn + ' ke dashboard...');
+    setStatus('Mengirim NISN ' + nisn + ' ke dashboard...');
     document.getElementById('reader').style.opacity = '0.45';
     try { if (scanner && started) await scanner.pause(true); } catch (e) {}
 
@@ -142,8 +155,6 @@
       } catch (err) {
         setStatus('Gagal mengirim hasil ke dashboard: ' + (err.message || err), true);
       }
-      // Kamera tetap terbuka; petugas dapat langsung memindai kartu siswa berikutnya.
-      // Jika ACK dari dashboard tidak tiba (misalnya koneksi terputus), pulihkan scanner setelah 20 detik.
       if (resumeFallbackTimer) clearTimeout(resumeFallbackTimer);
       resumeFallbackTimer = setTimeout(async function() {
         busy = false;
@@ -160,7 +171,26 @@
     }
   }
 
-  // Dashboard mengirim ACK setelah Apps Script selesai memproses NISN.
+  function submitManualNisn() {
+    const inputField = document.getElementById('manualNisnInput');
+    const val = inputField.value.trim();
+    if (!val) {
+      alert("Masukkan NISN terlebih dahulu!");
+      return;
+    }
+    onQrDecoded(val);
+    inputField.value = '';
+  }
+
+  function goToDashboard() {
+    if (window.opener && !window.opener.closed) {
+      window.opener.focus();
+      window.close();
+    } else {
+      history.back();
+    }
+  }
+
   window.addEventListener('message', function(event) {
     if (event.source !== window.opener || event.origin !== openerOrigin) return;
     const msg = event.data || {};
